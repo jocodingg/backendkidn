@@ -64,18 +64,23 @@ app.get('/api/latest', (req, res) => {
 const sseClients = new Set();
 
 app.get('/api/stream', (req, res) => {
-  // set headers untuk SSE
+  // SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+
+  // Wajib untuk CORS
+  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // Flush header (kalau ada)
   res.flushHeaders && res.flushHeaders();
 
-  // optional: allow CORS preflight (already handled globally)
   const clientId = Date.now() + Math.random();
   const client = { id: clientId, res };
   sseClients.add(client);
 
-  // kirim welcome
+  // Kirim event welcome
   res.write(`event: connected\ndata: ${JSON.stringify({ message: 'connected' })}\n\n`);
 
   req.on('close', () => {
