@@ -1,9 +1,9 @@
+// src/utils/aggregator.js
 const { insertAllData } = require('../models/alldataModel');
-const { getLatestAirForSource } = require('../models/airModel');
-const wsBroadcast = require('../ws/wsBroadcast');
+const latestAirCache = {}; // cache air terbaru per source
+const realtimeCache = require('./realtimeCache');
 
 const buffers = {}; 
-const latestAirCache = {}; // cache air terbaru per source
 
 function pushEddy(row) {
   const src = row.source;
@@ -18,12 +18,11 @@ function pushEddy(row) {
   if (buffers[src].sec === sec) {
     buffers[src].rows.push(row);
   } else {
-    // hanya ganti buffer, flush diserahkan ke timer
+    // hanya ganti buffer - flush akan terjadi di timer
     buffers[src] = { sec, rows: [row] };
   }
 }
 
-// NEW: agar air masuk ke cache untuk digabung saat flush
 function pushAir(row) {
   latestAirCache[row.source] = {
     pm25: row.pm25,
@@ -71,11 +70,16 @@ async function flushBuffer() {
         voc: air.voc
       };
 
-      await insertAllData(record)
-        .catch(err => console.error("insertAllData error:", err));
+      try {
+        await insertAllData(record);
+      } catch (err) {
+        console.error("insertAllData error:", err);
+      }
 
-      wsBroadcast.broadcast(JSON.stringify({ type: "alldata", data: record }));
+      // update realtime cache (untuk polling / SSE)
+      realtimeCache.setLatest(record);
 
+      // bersihkan buffer
       delete buffers[src];
     }
   }
