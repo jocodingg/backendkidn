@@ -70,7 +70,7 @@ app.get('/api/stream', (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   // Wajib untuk CORS
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173', 'https://skyflux.c-greenproject.org');
+  res.setHeader('Access-Control-Allow-Origin', 'https://skyflux.c-greenproject.org');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 
   // Flush header (kalau ada)
