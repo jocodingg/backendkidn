@@ -17,7 +17,7 @@ app.use(cors({
   origin: [
     "https://skyflux.c-greenproject.org",
     "https://www.skyflux.c-greenproject.org",
-    "http://localhost:3000"
+    "http://localhost:5173"
   ],
   methods: ['GET', 'POST'],
   credentials: true
