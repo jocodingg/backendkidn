@@ -1,28 +1,68 @@
-// src/utils/aggregator.js
 const { insertAllData } = require('../models/alldataModel');
-const latestAirCache = {}; // cache air terbaru per source
 const realtimeCache = require('./realtimeCache');
 
-const buffers = {}; 
+const latestAirCache = {};   // air terbaru per source
+const buffers = {};          // buffer eddy per source
 
+// ==========================
+// FLUSH SATU DETIK (1 ROW)
+// ==========================
+async function flushOne(src, buf) {
+  if (!buf || !buf.rows.length) return;
+
+  const fields = ['co2', 'ch4', 'suhu', 'kelembapan', 'h2o', 'tekanan'];
+  const avg = {};
+
+  for (const f of fields) {
+    let sum = 0, count = 0;
+    for (const r of buf.rows) {
+      const v = Number(r[f]);
+      if (!isNaN(v)) {
+        sum += v;
+        count++;
+      }
+    }
+    avg[f] = count ? sum / count : null;
+  }
+
+  const air = latestAirCache[src] || { pm25: null, voc: null };
+
+  const record = {
+    timestamp: new Date(buf.sec * 1000).toISOString(),
+    source: src,
+    ...avg,
+    pm25: air.pm25,
+    voc: air.voc
+  };
+
+  await insertAllData(record);
+  realtimeCache.setLatest(record);
+}
+
+// ==========================
+// PUSH EDDY (7 Hz OK)
+// ==========================
 function pushEddy(row) {
   const src = row.source;
-  const t = new Date(row.timestamp);
-  const sec = Math.floor(t.getTime() / 1000);
+  const sec = Math.floor(new Date(row.timestamp).getTime() / 1000);
 
   if (!buffers[src]) {
     buffers[src] = { sec, rows: [row] };
     return;
   }
 
-  if (buffers[src].sec === sec) {
-    buffers[src].rows.push(row);
-  } else {
-    // hanya ganti buffer - flush akan terjadi di timer
+  // ganti detik → flush buffer lama
+  if (buffers[src].sec !== sec) {
+    flushOne(src, buffers[src]).catch(console.error);
     buffers[src] = { sec, rows: [row] };
+  } else {
+    buffers[src].rows.push(row);
   }
 }
 
+// ==========================
+// PUSH AIR (1 Hz)
+// ==========================
 function pushAir(row) {
   latestAirCache[row.source] = {
     pm25: row.pm25,
@@ -31,61 +71,18 @@ function pushAir(row) {
   };
 }
 
-async function flushBuffer() {
+// ==========================
+// SAFETY FLUSH (ANTI NYANGKUT)
+// ==========================
+setInterval(() => {
   const nowSec = Math.floor(Date.now() / 1000);
 
-  for (const src of Object.keys(buffers)) {
-    const buf = buffers[src];
-    if (!buf) continue;
-
-    // flush hanya jika detik sudah lewat
-    if (nowSec - buf.sec >= 1) {
-
-      const rows = buf.rows;
-      const fields = ['co2','ch4','suhu','kelembapan','h2o','tekanan'];
-      const avg = {};
-
-      fields.forEach(f => {
-        let sum = 0, count = 0;
-        rows.forEach(r => {
-          const v = parseFloat(r[f]);
-          if (!isNaN(v)) { sum += v; count++; }
-        });
-        avg[f] = count > 0 ? sum / count : null;
-      });
-
-      // ambil air terbaru
-      const air = latestAirCache[src] || { pm25: null, voc: null };
-
-      const record = {
-        timestamp: new Date(buf.sec * 1000).toISOString(),
-        source: src,
-        co2: avg.co2,
-        ch4: avg.ch4,
-        suhu: avg.suhu,
-        kelembapan: avg.kelembapan,
-        h2o: avg.h2o,
-        tekanan: avg.tekanan,
-        pm25: air.pm25,
-        voc: air.voc
-      };
-
-      try {
-        await insertAllData(record);
-      } catch (err) {
-        console.error("insertAllData error:", err);
-      }
-
-      // update realtime cache (untuk polling / SSE)
-      realtimeCache.setLatest(record);
-
-      // bersihkan buffer
+  for (const src in buffers) {
+    if (nowSec - buffers[src].sec >= 2) {
+      flushOne(src, buffers[src]).catch(console.error);
       delete buffers[src];
     }
   }
-}
-
-// Flush 1 detik sekali
-setInterval(flushBuffer, 1000);
+}, 1000);
 
 module.exports = { pushEddy, pushAir };
