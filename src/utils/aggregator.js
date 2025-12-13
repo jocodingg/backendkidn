@@ -28,7 +28,7 @@ async function flushOne(src, buf) {
   const air = latestAirCache[src] || { pm25: null, voc: null };
 
   const record = {
-    timestamp: new Date(buf.sec * 1000).toISOString(),
+    timestamp: new Date(buf.sec * 1000),
     source: src,
     ...avg,
     pm25: air.pm25,
