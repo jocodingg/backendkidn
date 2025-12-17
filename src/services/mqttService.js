@@ -37,7 +37,7 @@ function start() {
 
       // ⏰ FIX TIMEZONE: ISO tanpa TZ dianggap WIB
       const ts = data.timestamp
-        ? new Date(data.timestamp + '+07:00')
+        ? new Date(new Date(data.timestamp).getTime() + 7 * 60 * 60 * 1000)
         : new Date();
 
       if (topic === TOPIC_EDDY) {
